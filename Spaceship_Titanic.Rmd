@@ -1,0 +1,115 @@
+---
+title: "Spaceship Titanic"
+output: html_notebook
+---
+
+From Kaggle.com, this is an inquiry into the Spaceship Titanic Dataset, attempting to predict which passengers were transported to an alternate dimension. What follows will be a series of tibbles depicting different aspects of the dataset along with a few preliminary theories, followed by a final, tentative conclusion.
+
+```{r}
+library("tidyverse")
+spaceship <- read_csv("train.csv")
+View(spaceship)
+gone <- select(spaceship,
+                      Transported,
+                      VIP,
+                      Cabin,
+                      Age)
+View(gone)
+VIP <- group_by(gone, VIP)
+VIP <- select(spaceship, VIP, Transported) %>%
+  group_by(VIP) %>%
+  count(VIP, Transported)
+
+VIP
+```
+
+From this first query, we can see a few things. First of all, about equal numbers of passengers were transported who were not VIP. For VIP passengers, there were more who were not transported than there were who ended up in another dimension. There are also about 200 passengers for which there is no VIP data, which we will note in subsequent queries.
+
+```{r}
+as_tibble(spaceship)
+ages <- spaceship %>%
+  group_by(Transported) %>%
+  summarize(avg_age = mean(Age, na.rm = TRUE))
+            
+ages
+```
+
+Here, I wondered if there was anything to be gleaned from the average age of passenger who was transported. Nothing significant jumped out, so I'll look next into the number of passengers from each age group who were transported.
+
+```{r}
+
+age_groups <- ggplot(data = spaceship) +
+  geom_jitter(mapping = aes(x = Age, y = Transported, alpha = 1/10))
+
+age_groups
+```
+
+Again, age does not seem to have an effect on whether a passenger was transported. There is a concentration of both transported and safe passengers in the 20-40 range, but the concentration seems evenly split between both, suggesting that there were simply more overall passengers in that age range.
+
+There is a small concentration of passengers who were transported who are below age 20, but I suspect that also include N/A values. My next query will explore that possibility.
+
+```{r}
+age_no_NA <- spaceship %>%
+  filter(!is.na(Age))
+View(age_no_NA)
+ggplot(age_no_NA) +
+  geom_jitter(mapping = aes(x = Age, y = Transported), alpha = 1/10)
+```
+
+Dropping N/A values did not change much about the graph, and I discovered that several of the ages are listed as "0". Whether they were infants upon embarkation or simply did not have an age listed is not clear yet. More inquiries...
+
+```{r}
+age_zero <- filter(spaceship, Age == 0)
+
+ggplot(age_zero, aes(x = Transported, fill = VIP)) +
+  geom_bar()
+```
+
+According to this data, there were no VIP passengers with an age of 0, and most passengers with that age were transported to the alternate dimension. Reasons for this are still not apparent, but that does add another data point to keep in mind.
+
+Age does not seem to factor into whether or not a person was transported, except to the extent that the average age of passengers clusters in the 20-40 range and passengers aged 0 were more likely to be transported than not. My next query will delve deeper into the VIP dynamics of passengers.
+
+```{r}
+VIP_data <- spaceship %>%
+  filter(!is.na(VIP), !is.na(CryoSleep)) %>%
+  filter(Age != 0)
+
+VIP_data %>%
+  group_by(CryoSleep, Transported)
+View(VIP_data)
+  
+ggplot(data = VIP_data) +
+  geom_point(mapping = aes(x = Age, y = Transported, color = CryoSleep))
+```
+
+Here, finally, I have a trend I can identify. Passengers not in CryoSleep were far less likely to be transported than passengers in CryoSleep. My next query will explore the VIP status of non-CryoSleepers.
+
+```{r}
+no_Cryo <- spaceship %>%
+  filter(!is.na(VIP), !is.na(CryoSleep), Age != 0, CryoSleep == FALSE)
+no_Cryo
+
+ggplot(data = no_Cryo, aes(x = Transported, fill = VIP)) +
+  geom_bar()
+```
+
+What this diagram shows is that nearly twice the amount of passengers not in CryoSleep avoided being transported, as opposed to those in CryoSleep. The VIP numbers are nearly negligible at this scale, so my next query will focus solely on VIP passengers.
+
+```{r}
+no_Cryo_VIP <- spaceship %>%
+  filter(Age != 0, VIP == TRUE)
+
+ggplot(data = no_Cryo_VIP, aes(x = Transported, fill = CryoSleep)) +
+  geom_bar()
+```
+
+So, of the VIP passengers (for which we have valid values), the only ones who were transported were in CryoSleep. VIP passengers not in CryoSleep were universally not transported.
+
+One final query, controlling for only the CryoSleep variable, before making a final conclusion.
+
+```{r}
+ggplot(data = spaceship, aes(x = Transported, fill = CryoSleep)) +
+  geom_bar()
+```
+
+Summary: The largest predictor of whether a passenger was transported to an alternate dimension on the Spaceship Titanic seems to be whether the passenger was in CryoSleep for the voyage. VIP status seems to be a mild indicator that a passenger would not be transported, but there is such a small percentage of passengers that were VIP that VIP status is not a significant predictor. On the other hand, CryoSleep seems to have been primarily a VIP privilege (or an amenity provided for infants), so perhaps the funds that VIP passengers had access to were either spent on CryoSleep or amenities during the voyage. With that reading, VIP status (or infant age) would be a stronger indicator of survival for the voyage.
